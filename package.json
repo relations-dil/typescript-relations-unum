@@ -1,0 +1,65 @@
+{
+  "name": "@relations-dil/unum",
+  "version": "0.1.0",
+  "description": "Relations source and tables for routing, syncing and clashes across unums.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/relations-dil/typescript-relations-unum.git"
+  },
+  "homepage": "https://github.com/relations-dil/typescript-relations-unum#readme",
+  "bugs": {
+    "url": "https://github.com/relations-dil/typescript-relations-unum/issues"
+  },
+  "keywords": [
+    "relations",
+    "unifist",
+    "unum",
+    "sync",
+    "route",
+    "microservice"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist dist-test",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "node --import tsx --test test/*.test.ts",
+    "coverage": "tsc -p tsconfig.test.json --noEmit false --outDir dist-test && node --test --experimental-test-coverage --test-coverage-exclude='dist-test/test/**' --test-reporter=spec dist-test/test/*.test.js",
+    "lint": "npm run typecheck && eslint src test",
+    "prepare": "[ ! -d src ] || npm run build",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "@relations-dil/relations": "^0.2.3",
+    "@relations-dil/unifist": "^0.1.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@relations-dil/relations": "^0.2.3",
+    "@relations-dil/unifist": "^0.1.1",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.39.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.71.0"
+  }
+}
