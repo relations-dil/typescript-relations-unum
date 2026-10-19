@@ -290,7 +290,6 @@ describe('Scribe', () => {
 // --------------------------------------------------------------------------- the source
 
 describe('UnumSource', () => {
-  let unifist: MockSource
   let local: MockSource
   let away: MockSource
   let cloud: MockSource
@@ -299,7 +298,8 @@ describe('UnumSource', () => {
   beforeEach(async () => {
     clear()
 
-    unifist = new MockSource('unifist')
+    new MockSource('unifist')
+
     local = new MockSource('local')
     away = new MockSource('away')
     cloud = new MockSource('cloud')
@@ -343,6 +343,11 @@ describe('UnumSource', () => {
     assert.deepEqual(source.members, { away: 'away', cloud: 'cloud' })
     assert.equal(source.chunk, null)
     assert.equal(source.KIND, 'unum')
+
+    // With a chunk to read by, or with nothing but a name
+
+    assert.equal(new UnumSource('paged', { chunk: 5 }).chunk, 5)
+    assert.equal(new UnumSource('plain').chunk, null)
   })
 
   it('test_init', () => {
@@ -398,6 +403,15 @@ describe('UnumSource', () => {
     down(cloud, 'create')
 
     await rejectsWith(() => new Team({ name: 'f' }).create(), 'SourceError', /cloud is down/)
+
+    // Anything that isn't a source being down is not for it to try the next for
+
+    away.create = async () => {
+      throw new Error('whoops')
+    }
+
+    await rejectsWith(() => new Team({ name: 'g' }).create(), 'Error', /whoops/)
+    assert.deepEqual(keys(cloud.data.team), ['2:team.unum:home'])
   })
 
   it('test_retrieve', async () => {
@@ -479,6 +493,23 @@ describe('UnumSource', () => {
     await again.update({ force: true })
 
     assert.equal(local.data.item.get(item.id)!.name, 'f')
+
+    // What else is asked of the write goes on to the source, force being taken here
+
+    const seen: any[][] = []
+    const real = (local as any).update.bind(local)
+
+    ;(local as any).update = async (model: any, ...args: any[]) => {
+      seen.push(args)
+      return real(model, ...args)
+    }
+
+    again.name = 'f2'
+    await again.update({ force: true, note: 'x' })
+    again.name = 'f'
+    await again.update({ force: true })
+
+    assert.deepEqual(seen, [[{ note: 'x' }], []])
 
     // By a query too, for the ones that clashed, and not for the others
 
@@ -644,6 +675,18 @@ describe('UnumSource', () => {
     }
 
     assert.deepEqual(filtered, ['q', 'k', 'b'])
+
+    // Anything but a source being down is raised
+
+    away.retrieve = async () => {
+      throw new Error('whoops')
+    }
+
+    await assert.rejects(async () => {
+      for await (const row of source.stream('away', Item.many().sort('name'), ['+name'])) {
+        assert.ok(row)
+      }
+    }, /whoops/)
   })
 
   it('test_select', async () => {
@@ -659,7 +702,7 @@ describe('UnumSource', () => {
     assert.deepEqual(
       await names(Item.many()),
       Object.entries(rows)
-        .map(([name, id]) => [id, name])
+        .map(([name, id]) => [id, name] as [string, string])
         .sort((first, second) => (first[0] < second[0] ? -1 : 1))
         .map(([, name]) => name)
     )
@@ -757,7 +800,7 @@ describe('apply', () => {
   }
 
   function journaled(): string[] {
-    return [...unifist.data.journal.keys()]
+    return [...unifist.data.journal.keys()].map(String)
   }
 
   function clashes(): Record<string, any> {
@@ -864,7 +907,10 @@ describe('apply', () => {
 
     // Something else going wrong is not for apply to hide
 
-    const broken = row('1:10:item.unum:away:away', 'create', { id: '10:item.unum:away', after: { id: '10:item.unum:away', version: 1, name: 'j' } })
+    const broken = row('1:10:item.unum:away:away', 'create', {
+      id: '10:item.unum:away',
+      after: { id: '10:item.unum:away', version: 1, name: 'j' }
+    })
 
     local.create = async () => {
       throw new SourceError('local is down')
