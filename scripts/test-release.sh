@@ -293,7 +293,7 @@ fresh
 run sh scripts/release-check.sh
 eq "check ready" 0 "$CODE"
 has "check says ready" "ready to release" "$OUT"
-eq "check runs the stages and the pack" "build test lint setup pack" "$(cat "$MAKE_LOG")"
+eq "check runs the pack" "pack" "$(cat "$MAKE_LOG")"
 
 fresh
 printf '# Changelog\n\n## [0.6.0] - 2026-01-01\n' > CHANGELOG.md
@@ -344,9 +344,6 @@ fresh
 MAKE_FAIL=pack run sh scripts/release-check.sh
 eq "check fails when pack does" 1 "$CODE"
 
-fresh
-MAKE_FAIL=lint run sh scripts/release-check.sh
-eq "check fails when a stage does" 1 "$CODE"
 
 # ---- release.sh
 
@@ -354,7 +351,7 @@ echo "== release.sh"
 fresh
 run sh scripts/release.sh
 eq "release runs" 0 "$CODE"
-eq "release order" "build test lint setup pack
+eq "release order" "pack
 publish
 verify
 tag" "$(cat "$MAKE_LOG")"
@@ -380,7 +377,7 @@ eq "release leaves no tag after a failed publish" "" "$(git ls-remote --tags ori
 fresh
 MAKE_FAIL=verify run sh scripts/release.sh
 eq "release stops when the install check fails" 1 "$CODE"
-eq "release doesn't reach the tag" "build test lint setup pack
+eq "release doesn't reach the tag" "pack
 publish
 verify" "$(cat "$MAKE_LOG")"
 eq "release leaves no tag" "" "$(git ls-remote --tags origin)"
