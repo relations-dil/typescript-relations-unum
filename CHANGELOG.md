@@ -5,8 +5,15 @@ All notable changes to this project are recorded here, newest first. Format foll
 
 ## [0.2.0] - 2026-10-22
 
+### Added
+- Scoped fan-out: a query is for the unums it names with a `unum` criterion (`unum: 'away'` or `unum__in: [...]`), or all of them if it names none, and each is asked for its own rows alone, with `unum` that unum's (this unum's own source, `local`, with this unum's). A query naming only this unum is answered from `local` and goes no further, so a member's API, which runs its own unum source, doesn't fan out again and send the whole Net back. A unum that's neither this one nor a member is never asked, so a query naming only those has no rows. Each unum's source is looked up from the unum (`universe()`), not taken to be it (relations-dil/typescript-relations-unum#5, as relations-dil/python-relations-unum#8 in 0.3.0 there).
+- `count` is the sum of each unum's own count, where it was this unum's alone. A source that can't be reached has none, as it has no rows, and what's synced is counted here alone (relations-dil/typescript-relations-unum#3).
+- `UnumSource.named`, `scopes`, `scoped` and `universe`, the pieces of that.
+
+No sync and no scribe rows yet: writes stay local, the unums just work together live. The id dedupe in `select` stays as a safety net.
 
 ### Changed
+- Needs `@relations-dil/unifist` 0.2.0, whose models have a `unum` field (relations-dil/typescript-relations-unifist#6), so each model that's routed here needs `unum: str`.
 - `make release-check` and `make release` don't run `build`, `test`, `lint` and `setup` again, only the `pack`: the Jenkins stages have just run them before the release stage, so it was the same work twice. Run them yourself before checking by hand, as `make release-check` is only the checks now (relations-dil/python-relations#90).
 
 ## [0.1.0] - 2026-10-18
