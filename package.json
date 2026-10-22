@@ -1,6 +1,6 @@
 {
   "name": "@relations-dil/unum",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Relations source and tables for routing, syncing and clashes across unums.",
   "license": "MIT",
   "repository": {
@@ -50,12 +50,12 @@
   },
   "peerDependencies": {
     "@relations-dil/relations": "^0.2.3",
-    "@relations-dil/unifist": "^0.1.1"
+    "@relations-dil/unifist": "^0.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "@relations-dil/relations": "^0.2.3",
-    "@relations-dil/unifist": "^0.1.1",
+    "@relations-dil/unifist": "^0.2.0",
     "@types/node": "^22.0.0",
     "eslint": "^9.39.5",
     "tsx": "^4.23.15",

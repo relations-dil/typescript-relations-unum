@@ -40,15 +40,15 @@ class Base extends UnifistModel {
   static source = 'unum'
 }
 
-class Item extends fields({ id: str, version: { kind: int, default: 1 }, name: str }, Base) {}
+class Item extends fields({ id: str, version: { kind: int, default: 1 }, unum: str, name: str }, Base) {}
 
-class Owned extends fields({ id: str, version: { kind: int, default: 1 }, name: str }, Base) {}
+class Owned extends fields({ id: str, version: { kind: int, default: 1 }, unum: str, name: str }, Base) {}
 
-class Mine extends fields({ id: str, version: { kind: int, default: 1 }, name: str }, Base) {}
+class Mine extends fields({ id: str, version: { kind: int, default: 1 }, unum: str, name: str }, Base) {}
 
-class Team extends fields({ id: str, version: { kind: int, default: 1 }, name: str }, Base) {}
+class Team extends fields({ id: str, version: { kind: int, default: 1 }, unum: str, name: str }, Base) {}
 
-class Copied extends fields({ id: str, version: { kind: int, default: 1 }, name: str }, Base) {}
+class Copied extends fields({ id: str, version: { kind: int, default: 1 }, unum: str, name: str }, Base) {}
 
 // --------------------------------------------------------------------------- module
 
@@ -457,7 +457,7 @@ describe('UnumSource', () => {
 
     // A record with no id to go by is looked for here
 
-    assert.deepEqual(((await Item.many({ name: 'a' }).retrieve()) as any).export(), [{ id: item.id, version: 1, name: 'a' }])
+    assert.deepEqual(((await Item.many({ name: 'a' }).retrieve()) as any).export(), [{ id: item.id, version: 1, unum: 'home', name: 'a' }])
   })
 
   it('test_update', async () => {
@@ -612,12 +612,12 @@ describe('UnumSource', () => {
       for (let position = 0; position < 6; position++) {
         const id = `${position + 1}:item.unum:${unum}`
         const name = 'abcdefghijklmnopqr'[position * 3 + number]
-        ;(each as MockSource).data.item.set(id, { id, version: 1, name })
+        ;(each as MockSource).data.item.set(id, { id, version: 1, unum: unum as string, name })
         rows[name] = id
       }
     })
 
-    away.data.item.set('1:item.unum:home', { id: '1:item.unum:home', version: 1, name: 'a' })
+    away.data.item.set('1:item.unum:home', { id: '1:item.unum:home', version: 1, unum: 'home', name: 'a' })
 
     return rows
   }
@@ -735,8 +735,8 @@ describe('UnumSource', () => {
     const found: any = await Item.many().sort('name').limit(2).retrieve()
 
     assert.deepEqual(found.export(), [
-      { id: rows.a, version: 1, name: 'a' },
-      { id: rows.b, version: 1, name: 'b' }
+      { id: rows.a, version: 1, unum: 'home', name: 'a' },
+      { id: rows.b, version: 1, unum: 'away', name: 'b' }
     ])
 
     found[0].name = 'z'
@@ -750,13 +750,197 @@ describe('UnumSource', () => {
     assert.equal(((await Item.many().sort('name').limit(100).retrieve()) as any).overflow, false)
   })
 
+  it('test_universe', () => {
+    // This unum's source first, then each other's, this unum being a member too changing nothing
+
+    assert.deepEqual([...source.universe()], [
+      ['home', 'local'],
+      ['away', 'away'],
+      ['cloud', 'cloud']
+    ])
+
+    source.members.home = 'elsewhere'
+
+    assert.deepEqual([...source.universe()], [
+      ['home', 'local'],
+      ['away', 'away'],
+      ['cloud', 'cloud']
+    ])
+  })
+
+  it('test_named', () => {
+    // No unum criterion names none, which is all of them
+
+    assert.equal(source.named(Item.many()), null)
+    assert.equal(source.named(Item.many({ name: 'a' })), null)
+    assert.equal(source.named(Item.many({ unum__not_in: ['away'] })), null)
+
+    // One or more are named by eq or in
+
+    assert.deepEqual([...source.named(Item.many({ unum: 'away' }))!], ['away'])
+    assert.deepEqual([...source.named(Item.many({ unum__in: ['away', 'cloud'] }))!], ['away', 'cloud'])
+
+    // Both having to be satisfied, only what's in each is named
+
+    assert.deepEqual([...source.named(Item.many({ unum: 'away', unum__in: ['away', 'cloud'] }))!], ['away'])
+    assert.deepEqual([...source.named(Item.many({ unum: 'home', unum__in: ['away', 'cloud'] }))!], [])
+  })
+
+  it('test_scopes', () => {
+    // Each unum there is, this one's first, when none are named
+
+    assert.deepEqual(source.scopes(Item.many()), [
+      ['home', 'local'],
+      ['away', 'away'],
+      ['cloud', 'cloud']
+    ])
+
+    // Only the ones named, in the order of the unums there are, not the order named
+
+    assert.deepEqual(source.scopes(Item.many({ unum: 'away' })), [['away', 'away']])
+    assert.deepEqual(source.scopes(Item.many({ unum__in: ['cloud', 'home'] })), [
+      ['home', 'local'],
+      ['cloud', 'cloud']
+    ])
+
+    // A unum there isn't is never asked, so a query naming only those is for none
+
+    assert.deepEqual(source.scopes(Item.many({ unum__in: ['away', 'nowhere'] })), [['away', 'away']])
+    assert.deepEqual(source.scopes(Item.many({ unum: 'nowhere' })), [])
+    assert.deepEqual(source.scopes(Item.many({ unum: 'home', unum__in: ['away'] })), [])
+  })
+
+  it('test_scoped', () => {
+    // A copy for one unum, with the query's other criteria and like kept, and whatever it named replaced
+
+    const query: any = Item.many({ name__in: ['a', 'b'], unum__in: ['away', 'cloud'], unum: 'away', like: 'a' })
+    const page = source.scoped(query, 'cloud')
+
+    assert.deepEqual(page._record.field('unum').criteria, { eq: 'cloud' })
+    assert.deepEqual(page._record.field('name').criteria, { in: ['a', 'b'] })
+    assert.deepEqual(page._like, query._like)
+
+    // The query isn't changed, nor does it share anything with the copy
+
+    assert.deepEqual(query._record.field('unum').criteria, { in: ['away', 'cloud'], eq: 'away' })
+
+    // Naming none is still scoped
+
+    assert.deepEqual(source.scoped(Item.many(), 'away')._record.field('unum').criteria, { eq: 'away' })
+
+    // And the criteria that aren't for naming are kept
+
+    assert.deepEqual(source.scoped(Item.many({ unum__not_in: ['away'] }), 'cloud')._record.field('unum').criteria, {
+      not_in: ['away'],
+      eq: 'cloud'
+    })
+  })
+
+  it('test_scoped_select', async () => {
+    fill()
+    source.chunk = 2
+
+    const names = async (query: any) => ((await query.retrieve()) as any).models.map((row: any) => row.name)
+
+    // A query for a unum is only that unum's rows, so away's copy of home's first isn't there, and others aren't asked
+
+    assert.deepEqual(await names(Item.many({ unum: 'away' }).sort('name')), 'behknq'.split(''))
+    assert.deepEqual(await names(Item.many({ unum: 'home' }).sort('name')), 'adgjmp'.split(''))
+
+    const asked: Array<[string, string]> = []
+
+    for (const each of [local, away, cloud]) {
+      const retrieve = each.retrieve.bind(each)
+
+      each.retrieve = async (model: any, ...args: any[]) => {
+        asked.push([each.name, JSON.stringify(model._record.field('unum').criteria)])
+        return retrieve(model, ...args)
+      }
+    }
+
+    const askedOf = () => [...new Set(asked.map(([name, criteria]) => `${name} ${criteria}`))].sort()
+
+    await names(Item.many({ unum: 'away' }).sort('name'))
+
+    assert.deepEqual(askedOf(), ['away {"eq":"away"}'])
+
+    // Or the ones it names, each asked for its own
+
+    asked.length = 0
+
+    assert.deepEqual(await names(Item.many({ unum__in: ['away', 'cloud'] }).sort('name')), 'bcefhiklnoqr'.split(''))
+    assert.deepEqual(askedOf(), ['away {"eq":"away"}', 'cloud {"eq":"cloud"}'])
+
+    // With nothing named it's all of them, each asked for its own, the copy only once, as the home's
+
+    asked.length = 0
+
+    assert.deepEqual(await names(Item.many().sort('name')), 'abcdefghijklmnopqr'.split(''))
+    assert.deepEqual(askedOf(), ['away {"eq":"away"}', 'cloud {"eq":"cloud"}', 'local {"eq":"home"}'])
+
+    // A unum there isn't is never asked, and a query naming only those has no rows
+
+    asked.length = 0
+
+    assert.deepEqual(await names(Item.many({ unum__in: ['away', 'nowhere'] }).sort('name')), 'behknq'.split(''))
+    assert.deepEqual(await names(Item.many({ unum: 'nowhere' })), [])
+    assert.deepEqual(askedOf(), ['away {"eq":"away"}'])
+
+    // Rows that sort the same, from every unum, are all there
+
+    assert.equal((await names(Item.many().sort('version'))).length, 18)
+
+    // What else it filters by is still done, and limits are of the whole
+
+    assert.deepEqual(await names(Item.many({ unum__in: ['away', 'cloud'], name__in: ['b', 'c', 'q'] }).sort('name')), ['b', 'c', 'q'])
+    assert.deepEqual(await names(Item.many({ unum__in: ['away', 'cloud'] }).sort('name').limit({ limit: 3, start: 2 })), ['e', 'f', 'h'])
+
+    // A member's own API runs its own unum source, which a query for just it never gets past
+
+    down(away, 'retrieve')
+
+    assert.deepEqual(await names(Item.many({ unum: 'away' })), [])
+  })
+
   it('test_count', async () => {
-    // Everything else is still here for now
+    fill()
 
-    await new Item({ name: 'a' }).create()
-    await new Item({ name: 'b' }).create()
+    // Each unum's own rows added up, away's copy of home's first not counted twice
 
-    assert.equal(await Item.many().count(), 2)
+    assert.equal(await Item.many().count(), 18)
+    assert.equal(await Item.many({ name__in: ['a', 'b', 'c'] }).count(), 3)
+
+    // Only the ones it names, each asked for its own
+
+    assert.equal(await Item.many({ unum: 'away' }).count(), 6)
+    assert.equal(await Item.many({ unum: 'home' }).count(), 6)
+    assert.equal(await Item.many({ unum__in: ['away', 'cloud'] }).count(), 12)
+    assert.equal(await Item.many({ unum__in: ['away', 'cloud'], name__in: ['b', 'c', 'a'] }).count(), 2)
+
+    // Never one there isn't
+
+    assert.equal(await Item.many({ unum: 'nowhere' }).count(), 0)
+    assert.equal(await Item.many({ unum__in: ['away', 'nowhere'] }).count(), 6)
+
+    // A source that can't be reached has none
+
+    down(cloud, 'count')
+
+    assert.equal(await Item.many().count(), 12)
+
+    // Anything but a source being down is raised
+
+    away.count = async () => {
+      throw new Error('whoops')
+    }
+
+    await assert.rejects(() => Item.many().count(), /whoops/)
+
+    // And what's synced is counted here alone, as it's here alone it's written and read
+
+    await source.syncing(async () => {
+      assert.equal(await Item.many().count(), 6)
+    })
   })
 })
 

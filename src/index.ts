@@ -267,6 +267,67 @@ export class UnumSource extends Source {
     return (lookup(names[names.length - 1]) as any)[action](model, ...args)
   }
 
+  /** The name of the source of each unum there is, this unum's own (local) first, then each other's (members) */
+  universe(): Map<string, string> {
+    const universe = new Map<string, string>([[this.unum, this.local]])
+
+    for (const [unum, name] of Object.entries(this.members)) {
+      if (unum !== this.unum) {
+        universe.set(unum, name)
+      }
+    }
+
+    return universe
+  }
+
+  /**
+   * The unums a query names with its unum criteria, both eq and in having to be satisfied, or null if it names
+   * none
+   */
+  named(model: any): Set<string> | null {
+    const criteria = model._record.field('unum').criteria ?? {}
+
+    let named: Set<string> | null = null
+
+    if ('eq' in criteria) {
+      named = new Set([criteria.eq])
+    }
+
+    if ('in' in criteria) {
+      named = named === null ? new Set(criteria.in) : new Set([...named].filter((unum) => criteria.in.includes(unum)))
+    }
+
+    return named
+  }
+
+  /**
+   * The unum and name of the source of each unum a query is for: all of them if it names none, else only the
+   * ones it names that there are. A unum there isn't is never asked
+   */
+  scopes(model: any): Array<[string, string]> {
+    const named = this.named(model)
+
+    return [...this.universe()].filter(([unum]) => named === null || named.has(unum))
+  }
+
+  /** A copy of a query for one unum alone, whatever unums it named replaced by that one */
+  scoped(model: any, unum: string): any {
+    const page = (model.constructor as any).many()
+
+    page._record = model._record.copy()
+    page._like = model._like
+
+    const field = page._record.field('unum')
+
+    field.criteria = field.criteria ?? {}
+
+    delete field.criteria.in
+
+    field.criteria.eq = unum
+
+    return page
+  }
+
   /** Every source it routes to has to know the model */
   init(model: ModelIdentity): void {
     for (const name of new Set([this.local, ...Object.values(this.members)])) {
@@ -327,16 +388,16 @@ export class UnumSource extends Source {
   }
 
   /**
-   * Every source's rows of a query in the order it says, as if it was one, with a record that's in more than one only
-   * once, the first of them, from here before others. Nothing is read until it's needed
+   * Every row of a query from each unum it's for, each asked for its own rows alone, in the order it says as if it
+   * was one, with a record that's in more than one only once, the first of them, from here before others. Nothing
+   * is read until it's needed
    */
   async *select(model: any): AsyncGenerator<any> {
     const sorting = model._ordering(model._sort?.length ? model._sort : model._order)
-    const names = [...new Set([this.local, ...Object.values(this.members)])]
     const seen = new Set<string>()
 
     for await (const row of merge(
-      names.map((name) => this.stream(name, model, sorting)),
+      this.scopes(model).map(([unum, name]) => this.stream(name, this.scoped(model, unum), sorting)),
       sorting
     )) {
       if (!seen.has(row.id)) {
@@ -348,7 +409,7 @@ export class UnumSource extends Source {
 
   /**
    * Retrieves a record by its id from here if this unum holds it, or else its owner, writers and readers in turn.
-   * A query for many is every source's rows merged in order, and one without an id is from here
+   * A query for many is the rows of each unum it's for merged in order, and one without an id is from here
    */
   async retrieve(model: any, verify = true, ...args: any[]): Promise<any> {
     if (model._mode === 'many' && !this._syncing) {
@@ -414,9 +475,28 @@ export class UnumSource extends Source {
     return this.write('delete', model, ...forward(rest), ...args)
   }
 
-  /** Counts here for now */
-  async count(model: any, ...args: any[]): Promise<any> {
-    return (lookup(this.local) as any).count(model, ...args)
+  /**
+   * Counts what each unum the query is for has of its own, and adds them up. A source that can't be reached has
+   * none, as it has no rows, and what's synced is counted here alone
+   */
+  async count(model: any, ...args: any[]): Promise<number> {
+    if (this._syncing) {
+      return (lookup(this.local) as any).count(model, ...args)
+    }
+
+    let total = 0
+
+    for (const [unum, name] of this.scopes(model)) {
+      try {
+        total += await (lookup(name) as any).count(this.scoped(model, unum), ...args)
+      } catch (error) {
+        if (!(error instanceof SourceError)) {
+          throw error
+        }
+      }
+    }
+
+    return total
   }
 }
 
