@@ -125,6 +125,7 @@ packaged() {
 # fresh: a clean repo on main, level with a bare origin
 fresh() {
     unpublish
+    publish 1.0.0 peerdep
     : > "$MAKE_LOG"
     rm -rf "$T/origin.git" "$T/work"
     git init -q --bare "$T/origin.git"
@@ -135,7 +136,7 @@ fresh() {
     mkdir scripts
     cp "$SCRIPTS"/lib.sh "$SCRIPTS"/new.sh "$SCRIPTS"/version.sh "$SCRIPTS"/release-check.sh "$SCRIPTS"/release.sh "$SCRIPTS"/verify.sh scripts/
     printf '0.6.1\n' > VERSION
-    printf '{\n  "name": "pkg",\n  "version": "0.6.1",\n  "repository": {\n    "type": "git",\n    "url": "git+https://github.com/relations-dil/pkg.git"\n  },\n  "devDependencies": {\n    "dep": "^1.0.0"\n  }\n}\n' > package.json
+    printf '{\n  "name": "pkg",\n  "version": "0.6.1",\n  "repository": {\n    "type": "git",\n    "url": "git+https://github.com/relations-dil/pkg.git"\n  },\n  "peerDependencies": {\n    "peerdep": "^1.0.0"\n  },\n  "devDependencies": {\n    "dep": "^1.0.0",\n    "unpub": "^9.0.0"\n  }\n}\n' > package.json
     printf '{\n  "name": "pkg",\n  "version": "0.6.1",\n  "lockfileVersion": 3\n}\n' > package-lock.json
     printf '# Changelog\n\n## [0.6.1] - 2026-01-01\n\n### Added\n- thing\n' > CHANGELOG.md
     git add -A
@@ -308,6 +309,24 @@ eq "check fails when package.json is behind" 1 "$CODE"
 has "check names package.json" "package.json isn't at 0.6.1" "$OUT"
 
 fresh
+sed -i 's/"version": "0.6.1"/"version": "0.6.0"/' package-lock.json
+run sh scripts/release-check.sh
+eq "check fails when the lockfile is behind" 1 "$CODE"
+has "check names the lockfile" "package-lock.json isn't at 0.6.1" "$OUT"
+
+fresh
+rm package-lock.json
+run sh scripts/release-check.sh
+eq "check doesn't ask for a lockfile there isn't" 0 "$CODE"
+
+fresh
+rm -rf "$FAKE_NPM/peerdep"
+run sh scripts/release-check.sh
+eq "check fails on an unpublished floor" 1 "$CODE"
+has "check names the floor" "peerdep 1.0.0 (the floor in package.json) isn't published yet" "$OUT"
+lacks "check leaves devDependencies alone" "unpub" "$OUT"
+
+fresh
 sed -i 's|"dep": "^1.0.0"|"dep": "git+https://github.com/relations-dil/dep.git#abc"|' package.json
 run sh scripts/release-check.sh
 eq "check fails on a git pin" 1 "$CODE"
@@ -442,6 +461,7 @@ passes "listed takes another package's name" listed 1.0.0 dep
 fails "listed says no for a package that isn't there" listed 1.0.0 nope
 publish 2.0.0 @scope/dep
 passes "listed takes a scoped name" listed 2.0.0 @scope/dep
+has "listed asks for a scoped name with the slash encoded" "@scope%2Fdep" "$(cat "$T/server.log")"
 printf '{\n  "name": "@scope/pkg",\n  "version": "0.6.1"\n}\n' > package.json
 eq "package keeps the scope" "@scope/pkg" "$(package)"
 publish 0.6.1 @scope/pkg
