@@ -6,6 +6,7 @@ All notable changes to this project are recorded here, newest first. Format foll
 ## [Unreleased]
 
 ### Changed
+- `make new` works on the ticket branch you're on: it writes VERSION, `package.json` and the changelog section there and commits, makes no branch of its own, and refuses on main, since we branch from the ticket. `B=` and `BRANCH_PREFIX` are gone (relations-dil/python-relations#98).
 - Checks before a release: a scoped package's slash is encoded when the registry is asked about it, `package-lock.json` has to be at `VERSION` along with `package.json`, and the floor of each dependency and peer dependency has to be published on npm already. The release scripts and their tests are the same in every TypeScript repo.
 
 ## [0.2.0] - 2026-10-22

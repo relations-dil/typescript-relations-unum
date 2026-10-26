@@ -66,12 +66,11 @@ publish: ## Publishes the version to npm
 	npm version $(VERSION) --no-git-tag-version --allow-same-version >/dev/null && npm run build && npm publish --access public"
 
 # Releases: make new starts one, make release-check says where it's up to and what would stop it, make release finishes it.
-# V is +0.0.1 (the default), +0.1, +1 or a version outright, and B names the branch. The work is in scripts/.
+# V is +0.0.1 (the default), +0.1, +1 or a version outright. Branch from the ticket first, make new works on that branch. The work is in scripts/.
 V?=+0.0.1
-B?=
 
-new: ## Starts a release: next version, branch, VERSION, changelog (V=+0.0.1|+0.1|+1|x.y.z, B=name)
-	@sh scripts/new.sh "$(V)" "$(B)"
+new: ## Starts a release on the ticket branch you're on: next version, VERSION, changelog (V=+0.0.1|+0.1|+1|x.y.z)
+	@sh scripts/new.sh "$(V)"
 
 sync: ## Syncs package.json and the lockfile to VERSION
 	docker run --rm $(TTY) -v ${PWD}/package.json:/opt/service/package.json -v ${PWD}/package-lock.json:/opt/service/package-lock.json -w /opt/service $(INSTALL) npm version $(VERSION) --no-git-tag-version --allow-same-version
