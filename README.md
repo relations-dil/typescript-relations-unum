@@ -134,7 +134,7 @@ Nothing needs installing but Docker and make. `make` on its own lists every targ
 `VERSION` is the one place the version is set. The work is in `scripts/`, one script per target.
 
 ```bash
-make new                  # next version: branch gaf3/<version>, VERSION, package.json, changelog
+make new                  # on the ticket branch you're on: next version, VERSION, package.json, changelog
 make release-check        # where the release is up to, and what would stop it
 make release              # from main: the checks, npm, a clean install from it, the tag
 make test-release         # tests the scripts against a throwaway repo and a fake registry
